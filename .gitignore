@@ -1,0 +1,6 @@
+target/
+.mvn/wrapper/apache-maven-*/
+.mvn/wrapper/apache-maven-*-bin.tar.gz
+.mvn/repository/
+*.class
+*.log
