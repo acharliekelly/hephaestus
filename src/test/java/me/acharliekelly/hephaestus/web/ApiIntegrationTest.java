@@ -92,6 +92,42 @@ class ApiIntegrationTest {
                 .contains("PaymentPort");
     }
 
+    @Test
+    void indexingPersistenceFailuresReturnUnprocessableEntity(@TempDir Path projectRoot) throws Exception {
+        Path firstPackageDir = Files.createDirectories(projectRoot.resolve("src/main/java/first/com/example"));
+        Path secondPackageDir = Files.createDirectories(projectRoot.resolve("src/main/java/second/com/example"));
+        Files.writeString(firstPackageDir.resolve("DuplicateService.java"), """
+                package com.example;
+
+                public class DuplicateService {
+                }
+                """);
+        Files.writeString(secondPackageDir.resolve("DuplicateService.java"), """
+                package com.example;
+
+                public class DuplicateService {
+                }
+                """);
+
+        String importJson = mockMvc.perform(post("/api/repositories/import-local")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new ImportLocalRepositoryRequest(projectRoot.toString()))))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        Long repositoryId = objectMapper.readValue(importJson, RepositoryResponse.class).id();
+
+        String errorJson = mockMvc.perform(post("/api/repositories/{repositoryId}/index", repositoryId))
+                .andExpect(status().isUnprocessableEntity())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(objectMapper.readValue(errorJson, ErrorResponse.class).message())
+                .contains("Failed to persist architecture facts");
+    }
+
     private void writeFixture(Path projectRoot) throws Exception {
         Path packageDir = Files.createDirectories(projectRoot.resolve("src/main/java/com/example"));
         Files.writeString(packageDir.resolve("PaymentPort.java"), """

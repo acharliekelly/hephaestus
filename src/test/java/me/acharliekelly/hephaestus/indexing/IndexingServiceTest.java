@@ -1,6 +1,7 @@
 package me.acharliekelly.hephaestus.indexing;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -46,6 +47,29 @@ class IndexingServiceTest {
         assertThat(sourceFiles.findByRepositoryId(repository.getId())).hasSize(first.sourceFileCount());
         assertThat(symbols.findByRepositoryId(repository.getId())).hasSize(first.symbolCount());
         assertThat(dependencies.findByRepositoryId(repository.getId())).hasSize(first.dependencyCount());
+    }
+
+    @Test
+    void wrapsPersistenceFailuresAsIndexingExceptions(@TempDir Path projectRoot) throws Exception {
+        Path firstPackageDir = Files.createDirectories(projectRoot.resolve("src/main/java/first/com/example"));
+        Path secondPackageDir = Files.createDirectories(projectRoot.resolve("src/main/java/second/com/example"));
+        Files.writeString(firstPackageDir.resolve("DuplicateService.java"), """
+                package com.example;
+
+                public class DuplicateService {
+                }
+                """);
+        Files.writeString(secondPackageDir.resolve("DuplicateService.java"), """
+                package com.example;
+
+                public class DuplicateService {
+                }
+                """);
+        RepositoryRecord repository = repoService.importLocal(projectRoot.toString());
+
+        assertThatThrownBy(() -> indexingService.indexRepository(repository.getId()))
+                .isInstanceOf(IndexingException.class)
+                .hasMessageContaining("Failed to persist architecture facts");
     }
 
     private void writeFixture(Path projectRoot) throws Exception {

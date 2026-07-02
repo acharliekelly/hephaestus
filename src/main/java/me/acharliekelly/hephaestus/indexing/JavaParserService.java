@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import me.acharliekelly.hephaestus.model.DependencyKind;
 import me.acharliekelly.hephaestus.model.SymbolKind;
 import org.springframework.stereotype.Service;
@@ -96,7 +97,7 @@ public class JavaParserService {
                 Optional<TypeDeclaration<?>> owner = ownerType(methodDeclaration);
                 owner.ifPresent(typeDeclaration -> {
                     String ownerQualifiedName = qualifiedTypeName(packageName, typeDeclaration);
-                    String methodQualifiedName = ownerQualifiedName + "#" + methodDeclaration.getNameAsString();
+                    String methodQualifiedName = methodQualifiedName(ownerQualifiedName, methodDeclaration);
                     symbols.add(new ParsedSymbol(
                             methodDeclaration.getNameAsString(),
                             methodQualifiedName,
@@ -197,6 +198,13 @@ public class JavaParserService {
             return localName;
         }
         return packageName.isBlank() ? localName : packageName + "." + localName;
+    }
+
+    private String methodQualifiedName(String ownerQualifiedName, MethodDeclaration methodDeclaration) {
+        String parameterTypes = methodDeclaration.getParameters().stream()
+                .map(parameter -> parameter.getType().asString())
+                .collect(Collectors.joining(","));
+        return ownerQualifiedName + "#" + methodDeclaration.getNameAsString() + "(" + parameterTypes + ")";
     }
 
     private String annotationName(AnnotationExpr annotation) {
