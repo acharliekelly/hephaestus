@@ -45,7 +45,7 @@ class IndexingServiceTest {
         assertThat(second).isEqualTo(first);
         assertThat(sourceFiles.findByRepositoryId(repository.getId())).hasSize(first.sourceFileCount());
         assertThat(symbols.findByRepositoryId(repository.getId())).hasSize(first.symbolCount());
-        assertThat(dependencies.findAll()).hasSize(first.dependencyCount());
+        assertThat(dependencies.findByRepositoryId(repository.getId())).hasSize(first.dependencyCount());
     }
 
     private void writeFixture(Path projectRoot) throws Exception {
@@ -70,4 +70,3 @@ class IndexingServiceTest {
                 """);
     }
 }
-
