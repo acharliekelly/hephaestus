@@ -54,7 +54,7 @@ class JavaParserServiceTest {
                 .contains(
                         tuple("com.example.payments.PaymentPort", SymbolKind.INTERFACE),
                         tuple("com.example.payments.PaymentService", SymbolKind.CLASS),
-                        tuple("com.example.payments.PaymentService#charge", SymbolKind.METHOD),
+                        tuple("com.example.payments.PaymentService#charge()", SymbolKind.METHOD),
                         tuple("com.example.payments.PaymentService.attempts", SymbolKind.FIELD),
                         tuple("com.example.payments.PaymentState", SymbolKind.ENUM)
                 );
@@ -69,6 +69,39 @@ class JavaParserServiceTest {
                         tuple("List<String>", DependencyKind.FIELD_TYPE),
                         tuple("recordAttempt", DependencyKind.METHOD_CALL)
                 );
+    }
+
+    @Test
+    void qualifiesOverloadedMethodsWithParameterTypes(@TempDir Path projectRoot) throws Exception {
+        Path packageDir = Files.createDirectories(projectRoot.resolve("src/main/java/com/example"));
+        Files.writeString(packageDir.resolve("ParserService.java"), """
+                package com.example;
+
+                public class ParserService {
+                    String parseFilename(String fileName) {
+                        return parseFilename(fileName, "-");
+                    }
+
+                    String parseFilename(String fileName, String separator) {
+                        return fileName + separator;
+                    }
+                }
+                """);
+
+        ParsedProject parsedProject = javaParserService.parse(projectRoot);
+
+        assertThat(parsedProject.sourceFiles())
+                .flatExtracting(ParsedSourceFile::symbols)
+                .extracting(ParsedSymbol::qualifiedName, ParsedSymbol::kind)
+                .contains(
+                        tuple("com.example.ParserService#parseFilename(String)", SymbolKind.METHOD),
+                        tuple("com.example.ParserService#parseFilename(String,String)", SymbolKind.METHOD)
+                );
+        assertThat(parsedProject.sourceFiles())
+                .flatExtracting(ParsedSourceFile::dependencies)
+                .filteredOn(dependency -> dependency.kind() == DependencyKind.METHOD_CALL)
+                .extracting(ParsedDependency::fromSymbolQualifiedName, ParsedDependency::targetName)
+                .contains(tuple("com.example.ParserService#parseFilename(String)", "parseFilename"));
     }
 
     private static org.assertj.core.groups.Tuple tuple(Object... values) {

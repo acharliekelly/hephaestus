@@ -13,6 +13,7 @@ import me.acharliekelly.hephaestus.model.persistence.CodeSymbolRecordRepository;
 import me.acharliekelly.hephaestus.model.persistence.DependencyRecordRepository;
 import me.acharliekelly.hephaestus.model.persistence.SourceFileRecordRepository;
 import me.acharliekelly.hephaestus.repo.RepoService;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,57 +53,61 @@ public class IndexingService {
         Map<String, CodeSymbolRecord> savedSymbols = new HashMap<>();
         Map<ParsedSourceFile, SourceFileRecord> savedSourceFiles = new HashMap<>();
 
-        for (ParsedSourceFile parsedSourceFile : parsedProject.sourceFiles()) {
-            SourceFileRecord sourceFile = sourceFiles.save(new SourceFileRecord(
-                    repository,
-                    parsedSourceFile.relativePath(),
-                    parsedSourceFile.absolutePath(),
-                    parsedSourceFile.packageName()
-            ));
-            savedSourceFiles.put(parsedSourceFile, sourceFile);
-            for (ParsedSymbol parsedSymbol : parsedSourceFile.symbols()) {
-                CodeSymbolRecord symbol = symbols.save(new CodeSymbolRecord(
+        try {
+            for (ParsedSourceFile parsedSourceFile : parsedProject.sourceFiles()) {
+                SourceFileRecord sourceFile = sourceFiles.save(new SourceFileRecord(
                         repository,
-                        sourceFile,
-                        parsedSymbol.name(),
-                        parsedSymbol.qualifiedName(),
-                        parsedSymbol.kind(),
-                        parsedSymbol.lineNumber()
+                        parsedSourceFile.relativePath(),
+                        parsedSourceFile.absolutePath(),
+                        parsedSourceFile.packageName()
                 ));
-                savedSymbols.put(symbol.getQualifiedName(), symbol);
-            }
-        }
-
-        Set<String> dependencyKeys = new LinkedHashSet<>();
-        int dependencyCount = 0;
-        for (ParsedSourceFile parsedSourceFile : parsedProject.sourceFiles()) {
-            SourceFileRecord sourceFile = savedSourceFiles.get(parsedSourceFile);
-            for (ParsedDependency parsedDependency : parsedSourceFile.dependencies()) {
-                CodeSymbolRecord fromSymbol = savedSymbols.get(parsedDependency.fromSymbolQualifiedName());
-                CodeSymbolRecord targetSymbol = resolveTargetSymbol(savedSymbols, parsedDependency);
-                String key = dependencyKey(sourceFile, fromSymbol, targetSymbol, parsedDependency);
-                if (dependencyKeys.add(key)) {
-                    dependencies.save(new DependencyRecord(
+                savedSourceFiles.put(parsedSourceFile, sourceFile);
+                for (ParsedSymbol parsedSymbol : parsedSourceFile.symbols()) {
+                    CodeSymbolRecord symbol = symbols.save(new CodeSymbolRecord(
                             repository,
                             sourceFile,
-                            fromSymbol,
-                            targetSymbol,
-                            parsedDependency.targetName(),
-                            parsedDependency.targetQualifiedName(),
-                            parsedDependency.kind(),
-                            parsedDependency.lineNumber()
+                            parsedSymbol.name(),
+                            parsedSymbol.qualifiedName(),
+                            parsedSymbol.kind(),
+                            parsedSymbol.lineNumber()
                     ));
-                    dependencyCount++;
+                    savedSymbols.put(symbol.getQualifiedName(), symbol);
                 }
             }
-        }
 
-        return new IndexingResult(
-                repository.getId(),
-                savedSourceFiles.size(),
-                savedSymbols.size(),
-                dependencyCount
-        );
+            Set<String> dependencyKeys = new LinkedHashSet<>();
+            int dependencyCount = 0;
+            for (ParsedSourceFile parsedSourceFile : parsedProject.sourceFiles()) {
+                SourceFileRecord sourceFile = savedSourceFiles.get(parsedSourceFile);
+                for (ParsedDependency parsedDependency : parsedSourceFile.dependencies()) {
+                    CodeSymbolRecord fromSymbol = savedSymbols.get(parsedDependency.fromSymbolQualifiedName());
+                    CodeSymbolRecord targetSymbol = resolveTargetSymbol(savedSymbols, parsedDependency);
+                    String key = dependencyKey(sourceFile, fromSymbol, targetSymbol, parsedDependency);
+                    if (dependencyKeys.add(key)) {
+                        dependencies.save(new DependencyRecord(
+                                repository,
+                                sourceFile,
+                                fromSymbol,
+                                targetSymbol,
+                                parsedDependency.targetName(),
+                                parsedDependency.targetQualifiedName(),
+                                parsedDependency.kind(),
+                                parsedDependency.lineNumber()
+                        ));
+                        dependencyCount++;
+                    }
+                }
+            }
+
+            return new IndexingResult(
+                    repository.getId(),
+                    savedSourceFiles.size(),
+                    savedSymbols.size(),
+                    dependencyCount
+            );
+        } catch (DataAccessException ex) {
+            throw new IndexingException("Failed to persist architecture facts for repository " + repositoryId, ex);
+        }
     }
 
     private CodeSymbolRecord resolveTargetSymbol(
