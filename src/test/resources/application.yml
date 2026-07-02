@@ -1,0 +1,14 @@
+debug: false
+
+logging:
+  level:
+    root: warn
+    me.acharliekelly.hephaestus: info
+    org.hibernate.SQL: warn
+    org.springframework: warn
+
+spring:
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: create-drop
