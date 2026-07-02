@@ -14,6 +14,9 @@ public interface DependencyRecordRepository extends JpaRepository<DependencyReco
     @EntityGraph(attributePaths = {"sourceFile", "fromSymbol", "targetSymbol"})
     List<DependencyRecord> findByTargetSymbolId(Long symbolId);
 
+    @EntityGraph(attributePaths = {"sourceFile", "fromSymbol", "fromSymbol.sourceFile", "targetSymbol", "targetSymbol.sourceFile"})
+    List<DependencyRecord> findByRepositoryId(Long repositoryId);
+
     @Modifying
     @Query("delete from DependencyRecord dependency where dependency.repository.id = :repositoryId")
     void deleteByRepositoryId(Long repositoryId);
