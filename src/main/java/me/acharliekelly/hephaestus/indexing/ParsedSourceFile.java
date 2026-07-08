@@ -7,7 +7,7 @@ public record ParsedSourceFile(
         String absolutePath,
         String packageName,
         List<ParsedSymbol> symbols,
-        List<ParsedDependency> dependencies
+        List<ParsedDependency> dependencies,
+        List<ParsedEndpoint> endpoints
 ) {
 }
-

@@ -120,7 +120,8 @@ public class JavaParserService {
                     sourceFile.toAbsolutePath().normalize().toString(),
                     packageName,
                     symbols,
-                    dependencies
+                    dependencies,
+                    List.of()
             );
         } catch (IOException ex) {
             throw new IndexingException("Failed to parse " + sourceFile, ex);
