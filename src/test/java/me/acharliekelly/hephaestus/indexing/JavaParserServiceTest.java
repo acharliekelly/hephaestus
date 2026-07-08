@@ -104,6 +104,61 @@ class JavaParserServiceTest {
                 .contains(tuple("com.example.ParserService#parseFilename(String)", "parseFilename"));
     }
 
+    @Test
+    void parsesSpringMvcEndpoints(@TempDir Path projectRoot) throws Exception {
+        Path packageDir = Files.createDirectories(projectRoot.resolve("src/main/java/com/example/web"));
+        Files.writeString(packageDir.resolve("FileController.java"), """
+                package com.example.web;
+
+                import org.springframework.web.bind.annotation.DeleteMapping;
+                import org.springframework.web.bind.annotation.GetMapping;
+                import org.springframework.web.bind.annotation.PathVariable;
+                import org.springframework.web.bind.annotation.PostMapping;
+                import org.springframework.web.bind.annotation.RequestBody;
+                import org.springframework.web.bind.annotation.RequestMapping;
+                import org.springframework.web.bind.annotation.RestController;
+
+                @RestController
+                @RequestMapping("/api/files")
+                public class FileController {
+                    @GetMapping
+                    public String list() {
+                        return "ok";
+                    }
+
+                    @PostMapping({"/upload", "/imports"})
+                    public String upload(@RequestBody String body) {
+                        return body;
+                    }
+
+                    @DeleteMapping("/{id}")
+                    public void delete(@PathVariable String id) {
+                    }
+                }
+                """);
+
+        ParsedProject parsedProject = javaParserService.parse(projectRoot);
+
+        assertThat(parsedProject.sourceFiles())
+                .flatExtracting(ParsedSourceFile::endpoints)
+                .extracting(
+                        ParsedEndpoint::httpMethod,
+                        ParsedEndpoint::path,
+                        ParsedEndpoint::controllerQualifiedName,
+                        ParsedEndpoint::handlerQualifiedName
+                )
+                .contains(
+                        tuple("GET", "/api/files", "com.example.web.FileController",
+                                "com.example.web.FileController#list()"),
+                        tuple("POST", "/api/files/upload", "com.example.web.FileController",
+                                "com.example.web.FileController#upload(String)"),
+                        tuple("POST", "/api/files/imports", "com.example.web.FileController",
+                                "com.example.web.FileController#upload(String)"),
+                        tuple("DELETE", "/api/files/{id}", "com.example.web.FileController",
+                                "com.example.web.FileController#delete(String)")
+                );
+    }
+
     private static org.assertj.core.groups.Tuple tuple(Object... values) {
         return org.assertj.core.api.Assertions.tuple(values);
     }

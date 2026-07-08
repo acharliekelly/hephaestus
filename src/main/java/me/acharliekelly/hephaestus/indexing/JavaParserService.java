@@ -9,7 +9,12 @@ import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.expr.AnnotationExpr;
+import com.github.javaparser.ast.expr.ArrayInitializerExpr;
+import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.MemberValuePair;
 import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.NormalAnnotationExpr;
+import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import java.io.IOException;
@@ -48,6 +53,7 @@ public class JavaParserService {
                     .orElse("");
             List<ParsedSymbol> symbols = new ArrayList<>();
             List<ParsedDependency> dependencies = new ArrayList<>();
+            List<ParsedEndpoint> endpoints = new ArrayList<>();
 
             compilationUnit.getImports().forEach(importDeclaration -> {
                 String importedName = importDeclaration.getName().asString();
@@ -112,6 +118,12 @@ public class JavaParserService {
                             DependencyKind.METHOD_CALL,
                             line(methodCall)
                     )));
+                    endpoints.addAll(endpointDeclarations(
+                            typeDeclaration,
+                            methodDeclaration,
+                            ownerQualifiedName,
+                            methodQualifiedName
+                    ));
                 });
             });
 
@@ -121,11 +133,119 @@ public class JavaParserService {
                     packageName,
                     symbols,
                     dependencies,
-                    List.of()
+                    endpoints
             );
         } catch (IOException ex) {
             throw new IndexingException("Failed to parse " + sourceFile, ex);
         }
+    }
+
+    private List<ParsedEndpoint> endpointDeclarations(
+            TypeDeclaration<?> typeDeclaration,
+            MethodDeclaration methodDeclaration,
+            String controllerQualifiedName,
+            String handlerQualifiedName
+    ) {
+        if (!isController(typeDeclaration)) {
+            return List.of();
+        }
+        List<String> parsedClassPaths = annotationPaths(typeDeclaration, "RequestMapping");
+        List<String> classPaths = parsedClassPaths.isEmpty() ? List.of("") : parsedClassPaths;
+        return methodDeclaration.getAnnotations().stream()
+                .flatMap(annotation -> endpointMethods(annotationName(annotation)).stream()
+                        .flatMap(httpMethod -> {
+                            List<String> methodPaths = annotationPaths(annotation);
+                            if (methodPaths.isEmpty()) {
+                                methodPaths = List.of("");
+                            }
+                            List<ParsedEndpoint> parsedEndpoints = new ArrayList<>();
+                            for (String classPath : classPaths) {
+                                for (String methodPath : methodPaths) {
+                                    parsedEndpoints.add(new ParsedEndpoint(
+                                            httpMethod,
+                                            combinePaths(classPath, methodPath),
+                                            controllerQualifiedName,
+                                            handlerQualifiedName,
+                                            line(annotation)
+                                    ));
+                                }
+                            }
+                            return parsedEndpoints.stream();
+                        }))
+                .toList();
+    }
+
+    private boolean isController(TypeDeclaration<?> typeDeclaration) {
+        return typeDeclaration.getAnnotations().stream()
+                .map(this::annotationName)
+                .anyMatch(annotationName -> annotationName.equals("RestController") || annotationName.equals("Controller"));
+    }
+
+    private List<String> endpointMethods(String annotationName) {
+        return switch (annotationName) {
+            case "GetMapping" -> List.of("GET");
+            case "PostMapping" -> List.of("POST");
+            case "PutMapping" -> List.of("PUT");
+            case "PatchMapping" -> List.of("PATCH");
+            case "DeleteMapping" -> List.of("DELETE");
+            case "RequestMapping" -> List.of("GET", "POST", "PUT", "PATCH", "DELETE");
+            default -> List.of();
+        };
+    }
+
+    private List<String> annotationPaths(NodeWithAnnotations<?> node, String annotationName) {
+        return node.getAnnotations().stream()
+                .filter(annotation -> annotationName(annotation).equals(annotationName))
+                .flatMap(annotation -> annotationPaths(annotation).stream())
+                .toList();
+    }
+
+    private List<String> annotationPaths(AnnotationExpr annotation) {
+        if (annotation instanceof SingleMemberAnnotationExpr singleMemberAnnotationExpr) {
+            return literalStrings(singleMemberAnnotationExpr.getMemberValue());
+        }
+        if (annotation instanceof NormalAnnotationExpr normalAnnotationExpr) {
+            for (MemberValuePair pair : normalAnnotationExpr.getPairs()) {
+                if (pair.getNameAsString().equals("value") || pair.getNameAsString().equals("path")) {
+                    return literalStrings(pair.getValue());
+                }
+            }
+        }
+        return List.of("");
+    }
+
+    private List<String> literalStrings(Expression expression) {
+        if (expression.isStringLiteralExpr()) {
+            return List.of(expression.asStringLiteralExpr().asString());
+        }
+        if (expression instanceof ArrayInitializerExpr arrayInitializerExpr) {
+            return arrayInitializerExpr.getValues().stream()
+                    .filter(Expression::isStringLiteralExpr)
+                    .map(value -> value.asStringLiteralExpr().asString())
+                    .toList();
+        }
+        return List.of();
+    }
+
+    private String combinePaths(String classPath, String methodPath) {
+        String combined = ("/" + stripSlashes(classPath) + "/" + stripSlashes(methodPath)).replaceAll("/+", "/");
+        return combined.length() > 1 && combined.endsWith("/")
+                ? combined.substring(0, combined.length() - 1)
+                : combined;
+    }
+
+    private String stripSlashes(String path) {
+        if (path == null || path.isBlank() || path.equals("/")) {
+            return "";
+        }
+        String stripped = path;
+        while (stripped.startsWith("/")) {
+            stripped = stripped.substring(1);
+        }
+        while (stripped.endsWith("/")) {
+            stripped = stripped.substring(0, stripped.length() - 1);
+        }
+        return stripped;
     }
 
     private void addTypeDependencies(
