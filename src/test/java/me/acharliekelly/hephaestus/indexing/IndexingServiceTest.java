@@ -5,9 +5,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import me.acharliekelly.hephaestus.model.EndpointRecord;
 import me.acharliekelly.hephaestus.model.RepositoryRecord;
 import me.acharliekelly.hephaestus.model.persistence.CodeSymbolRecordRepository;
 import me.acharliekelly.hephaestus.model.persistence.DependencyRecordRepository;
+import me.acharliekelly.hephaestus.model.persistence.EndpointRecordRepository;
 import me.acharliekelly.hephaestus.model.persistence.SourceFileRecordRepository;
 import me.acharliekelly.hephaestus.repo.RepoService;
 import org.junit.jupiter.api.Test;
@@ -31,6 +33,9 @@ class IndexingServiceTest {
 
     @Autowired
     private DependencyRecordRepository dependencies;
+
+    @Autowired
+    private EndpointRecordRepository endpoints;
 
     @Test
     void persistsFactsAndReindexingDoesNotDuplicateThem(@TempDir Path projectRoot) throws Exception {
@@ -72,6 +77,37 @@ class IndexingServiceTest {
                 .hasMessageContaining("Failed to persist architecture facts");
     }
 
+    @Test
+    void persistsEndpointFactsAndReindexingDoesNotDuplicateThem(@TempDir Path projectRoot) throws Exception {
+        Path packageDir = Files.createDirectories(projectRoot.resolve("src/main/java/com/example/web"));
+        Files.writeString(packageDir.resolve("FileController.java"), """
+                package com.example.web;
+
+                import org.springframework.web.bind.annotation.GetMapping;
+                import org.springframework.web.bind.annotation.PathVariable;
+                import org.springframework.web.bind.annotation.RequestMapping;
+                import org.springframework.web.bind.annotation.RestController;
+
+                @RestController
+                @RequestMapping("/api/files")
+                public class FileController {
+                    @GetMapping("/{id}")
+                    public String getFile(@PathVariable String id) {
+                        return id;
+                    }
+                }
+                """);
+        RepositoryRecord repository = repoService.importLocal(projectRoot.toString());
+
+        indexingService.indexRepository(repository.getId());
+        indexingService.indexRepository(repository.getId());
+
+        assertThat(endpoints.findByRepositoryId(repository.getId()))
+                .hasSize(1)
+                .extracting(endpoint -> endpoint.getHttpMethod().name(), EndpointRecord::getPath)
+                .containsExactly(tuple("GET", "/api/files/{id}"));
+    }
+
     private void writeFixture(Path projectRoot) throws Exception {
         Path packageDir = Files.createDirectories(projectRoot.resolve("src/main/java/com/example"));
         Files.writeString(packageDir.resolve("PaymentPort.java"), """
@@ -92,5 +128,9 @@ class IndexingServiceTest {
                     }
                 }
                 """);
+    }
+
+    private static org.assertj.core.groups.Tuple tuple(Object... values) {
+        return org.assertj.core.api.Assertions.tuple(values);
     }
 }
