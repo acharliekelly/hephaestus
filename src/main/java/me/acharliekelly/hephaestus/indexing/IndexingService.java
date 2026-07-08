@@ -7,10 +7,13 @@ import java.util.Map;
 import java.util.Set;
 import me.acharliekelly.hephaestus.model.CodeSymbolRecord;
 import me.acharliekelly.hephaestus.model.DependencyRecord;
+import me.acharliekelly.hephaestus.model.EndpointRecord;
+import me.acharliekelly.hephaestus.model.HttpMethod;
 import me.acharliekelly.hephaestus.model.RepositoryRecord;
 import me.acharliekelly.hephaestus.model.SourceFileRecord;
 import me.acharliekelly.hephaestus.model.persistence.CodeSymbolRecordRepository;
 import me.acharliekelly.hephaestus.model.persistence.DependencyRecordRepository;
+import me.acharliekelly.hephaestus.model.persistence.EndpointRecordRepository;
 import me.acharliekelly.hephaestus.model.persistence.SourceFileRecordRepository;
 import me.acharliekelly.hephaestus.repo.RepoService;
 import org.springframework.dao.DataAccessException;
@@ -24,24 +27,29 @@ public class IndexingService {
     private final SourceFileRecordRepository sourceFiles;
     private final CodeSymbolRecordRepository symbols;
     private final DependencyRecordRepository dependencies;
+    private final EndpointRecordRepository endpoints;
 
     public IndexingService(
             RepoService repoService,
             JavaParserService javaParserService,
             SourceFileRecordRepository sourceFiles,
             CodeSymbolRecordRepository symbols,
-            DependencyRecordRepository dependencies
+            DependencyRecordRepository dependencies,
+            EndpointRecordRepository endpoints
     ) {
         this.repoService = repoService;
         this.javaParserService = javaParserService;
         this.sourceFiles = sourceFiles;
         this.symbols = symbols;
         this.dependencies = dependencies;
+        this.endpoints = endpoints;
     }
 
     @Transactional
     public IndexingResult indexRepository(Long repositoryId) {
         RepositoryRecord repository = repoService.requireRepository(repositoryId);
+        endpoints.deleteByRepositoryId(repositoryId);
+        endpoints.flush();
         dependencies.deleteByRepositoryId(repositoryId);
         dependencies.flush();
         symbols.deleteByRepositoryId(repositoryId);
@@ -96,6 +104,21 @@ public class IndexingService {
                         ));
                         dependencyCount++;
                     }
+                }
+            }
+
+            for (ParsedSourceFile parsedSourceFile : parsedProject.sourceFiles()) {
+                SourceFileRecord sourceFile = savedSourceFiles.get(parsedSourceFile);
+                for (ParsedEndpoint parsedEndpoint : parsedSourceFile.endpoints()) {
+                    endpoints.save(new EndpointRecord(
+                            repository,
+                            sourceFile,
+                            savedSymbols.get(parsedEndpoint.controllerQualifiedName()),
+                            savedSymbols.get(parsedEndpoint.handlerQualifiedName()),
+                            HttpMethod.valueOf(parsedEndpoint.httpMethod()),
+                            parsedEndpoint.path(),
+                            parsedEndpoint.lineNumber()
+                    ));
                 }
             }
 
