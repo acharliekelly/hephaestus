@@ -87,6 +87,13 @@ curl http://localhost:8080/api/symbols/{symbolId}/dependents
 curl http://localhost:8080/api/repositories/{repositoryId}/architecture-summary
 ```
 
+### Query Spring Endpoints
+
+```bash
+curl http://localhost:8080/api/repositories/{repositoryId}/endpoints
+curl 'http://localhost:8080/api/repositories/{repositoryId}/endpoints?path=/api/files'
+```
+
 ### Mermaid Dependency Diagrams
 
 ```bash
