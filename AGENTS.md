@@ -25,3 +25,11 @@ Examples of architecture-impacting changes include:
 - adding a new external service dependency
 
 Create or update an ADR only for decisions that materially affect the project's architecture, technology stack, module boundaries, persistence strategy, AI orchestration, or public APIs. Routine implementation details do not require ADRs.
+
+## Git Workflow
+
+Do not create or modify Git worktrees unless explicitly instructed.
+
+Make changes in the current working tree using normal Git branches.
+
+Assume the current checkout is the environment used for local testing.
