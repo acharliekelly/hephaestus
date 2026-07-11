@@ -159,6 +159,55 @@ class JavaParserServiceTest {
                 );
     }
 
+    @Test
+    void parsesJava21RecordTextBlockAndSwitchExpression(@TempDir Path projectRoot) throws Exception {
+        Path packageDir = Files.createDirectories(projectRoot.resolve("src/main/java/com/example/payments"));
+        Files.writeString(packageDir.resolve("PaymentCommand.java"), """
+                package com.example.payments;
+
+                public record PaymentCommand(String accountId, int cents) {
+                    public String description() {
+                        return \"""
+                                payment:%s:%d
+                                \""".formatted(accountId, cents);
+                    }
+                }
+                """);
+        Files.writeString(packageDir.resolve("PaymentService.java"), """
+                package com.example.payments;
+
+                public class PaymentService {
+                    public String describe(PaymentCommand command) {
+                        return switch (command.cents()) {
+                            case 0 -> "free";
+                            default -> command.description();
+                        };
+                    }
+                }
+                """);
+
+        ParsedProject parsedProject = javaParserService.parse(projectRoot);
+
+        assertThat(parsedProject.sourceFiles()).hasSize(2);
+        assertThat(parsedProject.sourceFiles())
+                .flatExtracting(ParsedSourceFile::symbols)
+                .extracting(ParsedSymbol::qualifiedName, ParsedSymbol::kind)
+                .contains(
+                        tuple("com.example.payments.PaymentCommand", SymbolKind.CLASS),
+                        tuple("com.example.payments.PaymentCommand#description()", SymbolKind.METHOD),
+                        tuple("com.example.payments.PaymentService", SymbolKind.CLASS),
+                        tuple("com.example.payments.PaymentService#describe(PaymentCommand)", SymbolKind.METHOD)
+                );
+        assertThat(parsedProject.sourceFiles())
+                .flatExtracting(ParsedSourceFile::dependencies)
+                .filteredOn(dependency -> dependency.kind() == DependencyKind.METHOD_CALL)
+                .extracting(ParsedDependency::fromSymbolQualifiedName, ParsedDependency::targetName)
+                .contains(
+                        tuple("com.example.payments.PaymentCommand#description()", "formatted"),
+                        tuple("com.example.payments.PaymentService#describe(PaymentCommand)", "description")
+                );
+    }
+
     private static org.assertj.core.groups.Tuple tuple(Object... values) {
         return org.assertj.core.api.Assertions.tuple(values);
     }

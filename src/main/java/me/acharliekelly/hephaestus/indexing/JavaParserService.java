@@ -1,5 +1,6 @@
 package me.acharliekelly.hephaestus.indexing;
 
+import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
@@ -31,6 +32,11 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class JavaParserService {
+    public JavaParserService() {
+        StaticJavaParser.getParserConfiguration()
+                .setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_21);
+    }
+
     public ParsedProject parse(Path projectRoot) {
         try (var paths = Files.walk(projectRoot)) {
             List<ParsedSourceFile> sourceFiles = paths
