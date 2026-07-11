@@ -4,3 +4,4 @@ target/
 .mvn/repository/
 *.class
 *.log
+.directory

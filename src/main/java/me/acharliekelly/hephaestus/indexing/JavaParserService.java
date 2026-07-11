@@ -1,6 +1,9 @@
 package me.acharliekelly.hephaestus.indexing;
 
-import com.github.javaparser.StaticJavaParser;
+import com.github.javaparser.JavaParser;
+import com.github.javaparser.ParseProblemException;
+import com.github.javaparser.ParseResult;
+import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
@@ -31,6 +34,13 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class JavaParserService {
+    private final ParserConfiguration parserConfiguration;
+
+    public JavaParserService() {
+        this.parserConfiguration = new ParserConfiguration()
+                .setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_21);
+    }
+
     public ParsedProject parse(Path projectRoot) {
         try (var paths = Files.walk(projectRoot)) {
             List<ParsedSourceFile> sourceFiles = paths
@@ -47,7 +57,12 @@ public class JavaParserService {
 
     private ParsedSourceFile parseSourceFile(Path projectRoot, Path sourceFile) {
         try {
-            CompilationUnit compilationUnit = StaticJavaParser.parse(sourceFile);
+            ParseResult<CompilationUnit> parseResult = new JavaParser(parserConfiguration).parse(sourceFile);
+            if (!parseResult.isSuccessful()) {
+                throw new ParseProblemException(parseResult.getProblems());
+            }
+            CompilationUnit compilationUnit = parseResult.getResult()
+                    .orElseThrow(() -> new ParseProblemException(parseResult.getProblems()));
             String packageName = compilationUnit.getPackageDeclaration()
                     .map(packageDeclaration -> packageDeclaration.getName().asString())
                     .orElse("");
@@ -135,8 +150,8 @@ public class JavaParserService {
                     dependencies,
                     endpoints
             );
-        } catch (IOException ex) {
-            throw new IndexingException("Failed to parse " + sourceFile, ex);
+        } catch (IOException | ParseProblemException ex) {
+            throw new IndexingException("Failed to parse " + sourceFile + ": " + ex.getMessage(), ex);
         }
     }
 

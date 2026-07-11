@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
 import me.acharliekelly.hephaestus.model.DependencyKind;
 import me.acharliekelly.hephaestus.model.SymbolKind;
 import org.junit.jupiter.api.Test;
@@ -157,6 +159,85 @@ class JavaParserServiceTest {
                         tuple("DELETE", "/api/files/{id}", "com.example.web.FileController",
                                 "com.example.web.FileController#delete(String)")
                 );
+    }
+
+    @Test
+    void parsesJava21RecordTextBlockAndSwitchExpression(@TempDir Path projectRoot) throws Exception {
+        Path packageDir = Files.createDirectories(projectRoot.resolve("src/main/java/com/example/payments"));
+        Files.writeString(packageDir.resolve("PaymentCommand.java"), """
+                package com.example.payments;
+
+                public record PaymentCommand(String accountId, int cents) {
+                    public String description() {
+                        return \"""
+                                payment:%s:%d
+                                \""".formatted(accountId, cents);
+                    }
+                }
+                """);
+        Files.writeString(packageDir.resolve("PaymentService.java"), """
+                package com.example.payments;
+
+                public class PaymentService {
+                    public String describe(PaymentCommand command) {
+                        return switch (command.cents()) {
+                            case 0 -> "free";
+                            default -> command.description();
+                        };
+                    }
+                }
+                """);
+
+        ParsedProject parsedProject = javaParserService.parse(projectRoot);
+
+        assertThat(parsedProject.sourceFiles()).hasSize(2);
+        assertThat(parsedProject.sourceFiles())
+                .flatExtracting(ParsedSourceFile::symbols)
+                .extracting(ParsedSymbol::qualifiedName, ParsedSymbol::kind)
+                .contains(
+                        tuple("com.example.payments.PaymentCommand", SymbolKind.CLASS),
+                        tuple("com.example.payments.PaymentCommand#description()", SymbolKind.METHOD),
+                        tuple("com.example.payments.PaymentService", SymbolKind.CLASS),
+                        tuple("com.example.payments.PaymentService#describe(PaymentCommand)", SymbolKind.METHOD)
+                );
+        assertThat(parsedProject.sourceFiles())
+                .flatExtracting(ParsedSourceFile::dependencies)
+                .filteredOn(dependency -> dependency.kind() == DependencyKind.METHOD_CALL)
+                .extracting(ParsedDependency::fromSymbolQualifiedName, ParsedDependency::targetName)
+                .contains(
+                        tuple("com.example.payments.PaymentCommand#description()", "formatted"),
+                        tuple("com.example.payments.PaymentService#describe(PaymentCommand)", "description")
+                );
+    }
+
+    @Test
+    void parsesJava21SourceFromWorkerThread(@TempDir Path projectRoot) throws Exception {
+        Path packageDir = Files.createDirectories(projectRoot.resolve("src/main/java/com/example"));
+        Files.writeString(packageDir.resolve("PaymentCommand.java"), """
+                package com.example;
+
+                public record PaymentCommand(String accountId, int cents) {
+                    public String description() {
+                        return \"""
+                                payment:%s:%d
+                                \""".formatted(accountId, cents);
+                    }
+                }
+                """);
+
+        try (var executor = Executors.newSingleThreadExecutor()) {
+            ParsedProject parsedProject;
+            try {
+                parsedProject = executor.submit(() -> javaParserService.parse(projectRoot)).get();
+            } catch (ExecutionException ex) {
+                throw (Exception) ex.getCause();
+            }
+
+            assertThat(parsedProject.sourceFiles())
+                    .flatExtracting(ParsedSourceFile::symbols)
+                    .extracting(ParsedSymbol::qualifiedName, ParsedSymbol::kind)
+                    .contains(tuple("com.example.PaymentCommand", SymbolKind.CLASS));
+        }
     }
 
     private static org.assertj.core.groups.Tuple tuple(Object... values) {
