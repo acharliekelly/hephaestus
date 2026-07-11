@@ -128,6 +128,37 @@ class ApiIntegrationTest {
                 .contains("Failed to persist architecture facts");
     }
 
+    @Test
+    void parseFailuresReturnUnprocessableEntity(@TempDir Path projectRoot) throws Exception {
+        Path packageDir = Files.createDirectories(projectRoot.resolve("src/main/java/com/example"));
+        Files.writeString(packageDir.resolve("BrokenService.java"), """
+                package com.example;
+
+                public class BrokenService {
+                    public String broken() {
+                        return "missing close brace";
+                """);
+
+        String importJson = mockMvc.perform(post("/api/repositories/import-local")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new ImportLocalRepositoryRequest(projectRoot.toString()))))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        Long repositoryId = objectMapper.readValue(importJson, RepositoryResponse.class).id();
+
+        String errorJson = mockMvc.perform(post("/api/repositories/{repositoryId}/index", repositoryId))
+                .andExpect(status().isUnprocessableEntity())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(objectMapper.readValue(errorJson, ErrorResponse.class).message())
+                .contains("Failed to parse")
+                .contains("BrokenService.java");
+    }
+
     private void writeFixture(Path projectRoot) throws Exception {
         Path packageDir = Files.createDirectories(projectRoot.resolve("src/main/java/com/example"));
         Files.writeString(packageDir.resolve("PaymentPort.java"), """

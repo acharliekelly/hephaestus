@@ -1,5 +1,6 @@
 package me.acharliekelly.hephaestus.indexing;
 
+import com.github.javaparser.ParseProblemException;
 import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
@@ -141,8 +142,8 @@ public class JavaParserService {
                     dependencies,
                     endpoints
             );
-        } catch (IOException ex) {
-            throw new IndexingException("Failed to parse " + sourceFile, ex);
+        } catch (IOException | ParseProblemException ex) {
+            throw new IndexingException("Failed to parse " + sourceFile + ": " + ex.getMessage(), ex);
         }
     }
 
