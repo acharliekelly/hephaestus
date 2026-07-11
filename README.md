@@ -29,8 +29,12 @@ The current slice intentionally does not include:
 
 ## Requirements
 
-- Java 21
-- Bash-compatible shell for `./mvnw`
+- Java 21 or newer JDK for running the Maven wrapper.
+- Bash-compatible shell for `./mvnw`.
+
+The project source compatibility target remains Java 21. A newer local JDK can run
+the build, but project code should not require Java features beyond the Java 21
+baseline unless a later ADR supersedes ADR 0002.
 
 Maven does not need to be installed globally; this repository includes a Maven wrapper.
 
