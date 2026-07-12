@@ -93,6 +93,46 @@ class ApiIntegrationTest {
     }
 
     @Test
+    void queriesInterfaceImplementations(@TempDir Path projectRoot) throws Exception {
+        writeFixture(projectRoot);
+
+        String importJson = mockMvc.perform(post("/api/repositories/import-local")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new ImportLocalRepositoryRequest(projectRoot.toString()))))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        Long repositoryId = objectMapper.readValue(importJson, RepositoryResponse.class).id();
+
+        mockMvc.perform(post("/api/repositories/{repositoryId}/index", repositoryId))
+                .andExpect(status().isOk());
+
+        String portJson = mockMvc.perform(get("/api/repositories/{repositoryId}/symbols", repositoryId)
+                        .param("name", "PaymentPort"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        List<SymbolResponse> ports = objectMapper.readValue(portJson, new TypeReference<>() {
+        });
+        Long portId = ports.getFirst().id();
+
+        String implementationsJson = mockMvc.perform(get("/api/symbols/{symbolId}/implementations", portId))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        List<SymbolResponse> implementations = objectMapper.readValue(implementationsJson, new TypeReference<>() {
+        });
+        assertThat(implementations)
+                .extracting(SymbolResponse::qualifiedName)
+                .containsExactly("com.example.PaymentService");
+        assertThat(implementations.getFirst().sourcePath()).endsWith("PaymentService.java");
+    }
+
+    @Test
     void indexingPersistenceFailuresReturnUnprocessableEntity(@TempDir Path projectRoot) throws Exception {
         Path firstPackageDir = Files.createDirectories(projectRoot.resolve("src/main/java/first/com/example"));
         Path secondPackageDir = Files.createDirectories(projectRoot.resolve("src/main/java/second/com/example"));

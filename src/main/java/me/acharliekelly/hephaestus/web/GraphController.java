@@ -40,5 +40,11 @@ public class GraphController {
                 .map(DependencyResponse::from)
                 .toList();
     }
-}
 
+    @GetMapping("/symbols/{symbolId}/implementations")
+    public List<SymbolResponse> implementations(@PathVariable Long symbolId) {
+        return dependencyQueryService.implementationsOf(symbolId).stream()
+                .map(SymbolResponse::from)
+                .toList();
+    }
+}
