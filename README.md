@@ -78,11 +78,12 @@ curl -X POST http://localhost:8080/api/repositories/{repositoryId}/index
 curl 'http://localhost:8080/api/repositories/{repositoryId}/symbols?name=PaymentService'
 ```
 
-### Query Dependencies
+### Query Dependencies And Implementations
 
 ```bash
 curl http://localhost:8080/api/symbols/{symbolId}/dependencies
 curl http://localhost:8080/api/symbols/{symbolId}/dependents
+curl http://localhost:8080/api/symbols/{symbolId}/implementations
 ```
 
 ### Architecture Summary
